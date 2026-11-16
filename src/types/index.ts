@@ -32,6 +32,7 @@ export interface MenuItem {
   dietaryTags: string[];
   prepTimeMins: number;
   isAvailable: boolean;
+  stockQuantity: number;
   isFeatured: boolean;
   createdAt: string;
   updatedAt: string;

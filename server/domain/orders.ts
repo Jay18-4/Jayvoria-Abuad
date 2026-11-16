@@ -41,8 +41,8 @@ export interface OrderTotals {
   totalCents: number;
 }
 
-export const DELIVERY_FEE_CENTS = 550;
-export const FREE_DELIVERY_THRESHOLD_CENTS = 8500;
+export const DELIVERY_FEE_CENTS = 550000;
+export const FREE_DELIVERY_THRESHOLD_CENTS = 8500000;
 export const TAX_RATE = 0.08;
 
 export function calculateOrderTotals(
@@ -90,5 +90,5 @@ export function generateOrderReference(): string {
 }
 
 export function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return `₦${(cents / 100).toFixed(2)}`;
 }

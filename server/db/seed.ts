@@ -131,11 +131,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Black Truffle & Fig Burrata',
         description:
           'Creamy Pugliese burrata crowned with shaved Périgord black truffle, caramelized Mission figs, aged Saba glaze, and cold-pressed Tuscan olive oil.',
-        priceCents: 2400,
+        priceCents: 2400000,
         imageUrl: '/src/assets/images/dish_truffle_burrata_1794832267229.jpg',
         dietaryTags: JSON.stringify(["Chef's Selection", 'Vegetarian', 'Gluten-Free']),
         prepTimeMins: 10,
         isAvailable: 1,
+        stockQuantity: 25,
         isFeatured: 1,
       },
       {
@@ -143,11 +144,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'White Alba Truffle Carpaccio',
         description:
           'Paper-thin seasonal porcini and artichoke carpaccio finished with wild arugula, lemon oil, and shaved Alba truffle. Limited harvest.',
-        priceCents: 3400,
+        priceCents: 3400000,
         imageUrl: '/src/assets/images/dish_truffle_burrata_1794832267229.jpg',
         dietaryTags: JSON.stringify(['Vegan', 'Gluten-Free']),
         prepTimeMins: 12,
         isAvailable: 0,
+        stockQuantity: 0,
         isFeatured: 0,
       },
       {
@@ -155,11 +157,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Saffron Risotto & Diver Scallops',
         description:
           'Slow-simmered Acquerello Carnaroli rice infused with Iranian saffron, pan-seared Hokkaido diver scallops, crispy garden sage, and 24-month Parmigiano.',
-        priceCents: 3800,
+        priceCents: 3800000,
         imageUrl: '/src/assets/images/dish_saffron_risotto_1794832268605.jpg',
         dietaryTags: JSON.stringify(["Chef's Selection", 'Gluten-Free']),
         prepTimeMins: 22,
         isAvailable: 1,
+        stockQuantity: 25,
         isFeatured: 1,
       },
       {
@@ -167,11 +170,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Wild Chanterelle Tagliatelle',
         description:
           'Hand-cut egg yolk tagliatelle folded into roasted golden chanterelles, cultured thyme brown butter, black peppercorn, and aged Pecorino Romano.',
-        priceCents: 3200,
+        priceCents: 3200000,
         imageUrl: '/src/assets/images/dish_mushroom_tagliatelle_1794832269761.jpg',
         dietaryTags: JSON.stringify(['Vegetarian']),
         prepTimeMins: 18,
         isAvailable: 1,
+        stockQuantity: 4,
         isFeatured: 1,
       },
       {
@@ -179,11 +183,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Charcoal Wagyu Ribeye',
         description:
           '250g Miyazaki A5-cross ribeye seared over white oak embers, served with roasted bone-marrow herb butter, charred broccolini, and Barolo reduction.',
-        priceCents: 6400,
+        priceCents: 6400000,
         imageUrl: '/src/assets/images/dish_wagyu_ribeye_1794832267847.jpg',
         dietaryTags: JSON.stringify(["Chef's Selection", 'Gluten-Free']),
         prepTimeMins: 25,
         isAvailable: 1,
+        stockQuantity: 20,
         isFeatured: 1,
       },
       {
@@ -191,11 +196,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Crispy-Skin Mediterranean Branzino',
         description:
           'Line-caught sea bass fillet with blistered heirloom cherry tomatoes, fennel pollen, fresh garden dill, and warm saffron beurre blanc.',
-        priceCents: 4200,
+        priceCents: 4200000,
         imageUrl: '/src/assets/images/dish_branzino_crudo_1794832268780.jpg',
         dietaryTags: JSON.stringify(['Fresh', 'Gluten-Free']),
         prepTimeMins: 20,
         isAvailable: 1,
+        stockQuantity: 18,
         isFeatured: 1,
       },
       {
@@ -203,11 +209,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Calabrian Chili Ember Chicken',
         description:
           'Organic pasture-raised half chicken roasted under brick with smoky Calabrian chili glaze, Meyer lemon confit, and rosemary jus.',
-        priceCents: 3400,
+        priceCents: 3400000,
         imageUrl: '/src/assets/images/dish_wagyu_ribeye_1794832267847.jpg',
         dietaryTags: JSON.stringify(['Spicy', 'Gluten-Free']),
         prepTimeMins: 26,
         isAvailable: 1,
+        stockQuantity: 22,
         isFeatured: 0,
       },
       {
@@ -215,11 +222,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Valrhona Espresso Mascarpone Torte',
         description:
           'Layered 70% Guanaja dark chocolate mousse and espresso-soaked sponge paired with whipped mascarpone quenelle and crisp cocoa lace tuile.',
-        priceCents: 1800,
+        priceCents: 1800000,
         imageUrl: '/src/assets/images/dish_chocolate_torte_1794832269166.jpg',
         dietaryTags: JSON.stringify(["Chef's Selection", 'Vegetarian']),
         prepTimeMins: 8,
         isAvailable: 1,
+        stockQuantity: 30,
         isFeatured: 1,
       },
       {
@@ -227,11 +235,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Blood Orange & Rosemary Spritz',
         description:
           'Zero-proof botanical aperitif blending Sicilian blood orange reduction, charred garden rosemary syrup, gentian root bitters, and sparkling mineral water.',
-        priceCents: 1600,
+        priceCents: 1600000,
         imageUrl: '/src/assets/images/dish_citrus_aperitif_1794832268754.jpg',
         dietaryTags: JSON.stringify(['Vegan', 'Gluten-Free']),
         prepTimeMins: 5,
         isAvailable: 1,
+        stockQuantity: 30,
         isFeatured: 0,
       },
       {
@@ -239,11 +248,12 @@ export function seedDatabase(db: AppDatabase): void {
         name: 'Amalfi Yuzu & Bergamot Tonic',
         description:
           'Bright coastal citrus tonic crafted with cold-pressed bergamot peel, yuzu juice, and tonic quinine over a hand-carved crystal sphere.',
-        priceCents: 1500,
+        priceCents: 1500000,
         imageUrl: '/src/assets/images/dish_citrus_aperitif_1794832268754.jpg',
         dietaryTags: JSON.stringify(['Vegan', 'Fresh']),
         prepTimeMins: 5,
         isAvailable: 1,
+        stockQuantity: 3,
         isFeatured: 0,
       },
     ];
@@ -251,8 +261,8 @@ export function seedDatabase(db: AppDatabase): void {
     const insertItem = db.prepare(`
       INSERT INTO menu_items (
         category_id, name, description, price_cents, image_url,
-        dietary_tags, prep_time_mins, is_available, is_featured
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        dietary_tags, prep_time_mins, is_available, stock_quantity, is_featured
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of items) {
@@ -265,6 +275,7 @@ export function seedDatabase(db: AppDatabase): void {
         item.dietaryTags,
         item.prepTimeMins,
         item.isAvailable,
+        item.stockQuantity,
         item.isFeatured
       );
     }

@@ -77,7 +77,7 @@ export function createOrdersRouter(db: AppDatabase, paymentService = new Payment
     }> = [];
 
     const selectItem = db.prepare(
-      `SELECT id, name, price_cents, is_available, is_deleted FROM menu_items WHERE id = ?`
+      `SELECT id, name, price_cents, is_available, stock_quantity, is_deleted FROM menu_items WHERE id = ?`
     );
 
     for (const [menuItemId, quantity] of mergedQuantities.entries()) {
@@ -87,6 +87,7 @@ export function createOrdersRouter(db: AppDatabase, paymentService = new Payment
             name: string;
             price_cents: number;
             is_available: number;
+            stock_quantity: number;
             is_deleted: number;
           }
         | undefined;
@@ -97,9 +98,15 @@ export function createOrdersRouter(db: AppDatabase, paymentService = new Payment
         });
       }
 
-      if (dbItem.is_available !== 1) {
+      if (dbItem.is_available !== 1 || (dbItem.stock_quantity ?? 0) <= 0) {
         return res.status(400).json({
-          error: `"${dbItem.name}" is currently unavailable. Please remove it from your bag before ordering.`,
+          error: `"${dbItem.name}" is currently sold out. Please remove it from your bag before ordering.`,
+        });
+      }
+
+      if (quantity > dbItem.stock_quantity) {
+        return res.status(400).json({
+          error: `Only ${dbItem.stock_quantity} portion${dbItem.stock_quantity === 1 ? '' : 's'} of "${dbItem.name}" left in stock.`,
         });
       }
 
@@ -140,15 +147,36 @@ export function createOrdersRouter(db: AppDatabase, paymentService = new Payment
     try {
       db.exec('BEGIN IMMEDIATE');
 
-      // Re-verify item availability inside the write lock before committing
+      const now = new Date().toISOString();
+      const deductStock = db.prepare(
+        `UPDATE menu_items
+         SET stock_quantity = stock_quantity - ?,
+             is_available = CASE WHEN (stock_quantity - ?) <= 0 THEN 0 ELSE is_available END,
+             updated_at = ?
+         WHERE id = ? AND is_deleted = 0 AND is_available = 1 AND stock_quantity >= ?`
+      );
+
+      // Atomically verify & deduct inventory inside the write lock before committing
       for (const line of resolvedLines) {
-        const freshItem = selectItem.get(line.menuItemId) as
-          | { is_available: number; is_deleted: number; price_cents: number; name: string }
-          | undefined;
-        if (!freshItem || freshItem.is_deleted === 1 || freshItem.is_available !== 1) {
+        const result = deductStock.run(
+          line.quantity,
+          line.quantity,
+          now,
+          line.menuItemId,
+          line.quantity
+        );
+        if (result.changes !== 1) {
+          const freshItem = selectItem.get(line.menuItemId) as
+            | { is_available: number; stock_quantity: number; is_deleted: number }
+            | undefined;
           db.exec('ROLLBACK');
+          if (!freshItem || freshItem.is_deleted === 1 || freshItem.is_available !== 1 || freshItem.stock_quantity <= 0) {
+            return res.status(400).json({
+              error: `"${line.name}" is now sold out. Please review your bag.`,
+            });
+          }
           return res.status(400).json({
-            error: `"${line.name}" became unavailable. Please review your bag.`,
+            error: `Only ${freshItem.stock_quantity} portion${freshItem.stock_quantity === 1 ? '' : 's'} of "${line.name}" left in stock.`,
           });
         }
       }
@@ -158,7 +186,6 @@ export function createOrdersRouter(db: AppDatabase, paymentService = new Payment
         orderReference = generateOrderReference();
       }
 
-      const now = new Date().toISOString();
       const paymentStatus =
         input.paymentMethod === 'PAYSTACK' ? 'PAID_PAYSTACK' : 'PENDING_COLLECTION';
 

@@ -13,25 +13,25 @@ import { PaymentService, PaymentServiceError } from '../server/services/paymentS
 test('calculateOrderTotals computes subtotal, delivery fee below threshold, 8% tax, and total', () => {
   const totals = calculateOrderTotals(
     [
-      { unitPriceCents: 2400, quantity: 1 },
-      { unitPriceCents: 1800, quantity: 2 },
+      { unitPriceCents: 2400000, quantity: 1 },
+      { unitPriceCents: 1800000, quantity: 2 },
     ],
     'DELIVERY'
   );
-  // Subtotal = 2400 + 3600 = 6000 (< 8500 -> delivery fee 550)
-  // Tax = Math.round(6000 * 0.08) = 480
-  // Total = 6000 + 550 + 480 = 7030
-  assert.equal(totals.subtotalCents, 6000);
+  // Subtotal = 2400000 + 3600000 = 6000000 (< 8500000 -> delivery fee 550000)
+  // Tax = Math.round(6000000 * 0.08) = 480000
+  // Total = 6000000 + 550000 + 480000 = 7030000
+  assert.equal(totals.subtotalCents, 6000000);
   assert.equal(totals.deliveryFeeCents, DELIVERY_FEE_CENTS);
-  assert.equal(totals.taxCents, 480);
-  assert.equal(totals.totalCents, 7030);
+  assert.equal(totals.taxCents, 480000);
+  assert.equal(totals.totalCents, 7030000);
 });
 
-test('calculateOrderTotals waives delivery fee at or above $85 threshold and for collection', () => {
-  const freeDelivery = calculateOrderTotals([{ unitPriceCents: 9000, quantity: 1 }], 'DELIVERY');
+test('calculateOrderTotals waives delivery fee at or above ₦85,000 threshold and for collection', () => {
+  const freeDelivery = calculateOrderTotals([{ unitPriceCents: 9000000, quantity: 1 }], 'DELIVERY');
   assert.equal(freeDelivery.deliveryFeeCents, 0);
 
-  const collection = calculateOrderTotals([{ unitPriceCents: 2400, quantity: 1 }], 'COLLECTION');
+  const collection = calculateOrderTotals([{ unitPriceCents: 2400000, quantity: 1 }], 'COLLECTION');
   assert.equal(collection.deliveryFeeCents, 0);
 });
 
@@ -60,12 +60,18 @@ test('generateOrderReference creates SAV- prefixed 10-char reference', () => {
   assert.match(ref, /^SAV-[A-Z0-9]{6}$/);
 });
 
-test('PaymentService validates signed verification tokens and rejects tampering, expiry, wrong user, and amount mismatches', () => {
+test('PaymentService defaults to NGN, normalizes NAIRA to NGN, and validates signed verification tokens', () => {
+  const defaultSvc = new PaymentService({
+    secretKey: 'sk_test_unit_secret_key',
+    currency: 'NAIRA',
+  });
+  assert.equal(defaultSvc.getPublicConfig().currency, 'NGN');
+
   const svc = new PaymentService({
     secretKey: 'sk_test_unit_secret_key',
     publicKey: 'pk_test_unit_public_key',
     tokenSigningSecret: 'unit-test-hmac-secret',
-    currency: 'USD',
+    currency: 'NGN',
   });
 
   const futureExpiry = new Date(Date.now() + 60_000).toISOString();
@@ -73,7 +79,7 @@ test('PaymentService validates signed verification tokens and rejects tampering,
     reference: 'PSK-UNIT-001',
     userId: 7,
     amountCents: 5400,
-    currency: 'USD',
+    currency: 'NGN',
     expiresAt: futureExpiry,
   });
 
@@ -81,7 +87,7 @@ test('PaymentService validates signed verification tokens and rejects tampering,
     reference: 'PSK-UNIT-001',
     userId: 7,
     amountCents: 5400,
-    currency: 'USD',
+    currency: 'NGN',
   });
   assert.equal(verified.reference, 'PSK-UNIT-001');
   assert.equal(verified.amountCents, 5400);
@@ -125,7 +131,7 @@ test('PaymentService validates signed verification tokens and rejects tampering,
     reference: 'PSK-UNIT-002',
     userId: 7,
     amountCents: 5400,
-    currency: 'USD',
+    currency: 'NGN',
     expiresAt: new Date(Date.now() - 5_000).toISOString(),
   });
   assert.throws(

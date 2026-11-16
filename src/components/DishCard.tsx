@@ -24,11 +24,14 @@ export function DishCard({ item, onSelect }: DishCardProps) {
   const { getQuantity, addItem, updateQuantity } = useCart();
   const qty = getQuantity(item.id);
   const primaryTag = item.dietaryTags[0];
+  const isSoldOut = !item.isAvailable || item.stockQuantity <= 0;
+  const isLowStock = !isSoldOut && item.stockQuantity <= 5;
+  const maxOrderable = Math.min(50, item.stockQuantity);
 
   return (
     <article
       className={`group flex flex-col bg-[#FFFFFF] border border-[#EAE5DC] rounded-xl overflow-hidden shadow-card-rest transition-all duration-200 ${
-        item.isAvailable ? 'hover:shadow-card-hover hover:-translate-y-0.5' : 'opacity-85'
+        !isSoldOut ? 'hover:shadow-card-hover hover:-translate-y-0.5' : 'opacity-85'
       }`}
     >
       {/* Image top half */}
@@ -44,7 +47,7 @@ export function DishCard({ item, onSelect }: DishCardProps) {
             alt={item.name}
             referrerPolicy="no-referrer"
             className={`w-full h-full object-cover transition-transform duration-300 ${
-              item.isAvailable ? 'group-hover:scale-105' : 'grayscale-[45%]'
+              !isSoldOut ? 'group-hover:scale-105' : 'grayscale-[45%]'
             }`}
           />
         ) : (
@@ -64,10 +67,10 @@ export function DishCard({ item, onSelect }: DishCardProps) {
           </span>
         )}
 
-        {!item.isAvailable && (
+        {isSoldOut && (
           <div className="absolute inset-0 bg-[#0F172A]/45 flex items-center justify-center">
             <span className="px-3.5 py-1.5 rounded-full bg-[#FFFFFF]/95 text-[#0F172A] text-xs font-bold uppercase tracking-wider">
-              Currently Unavailable
+              Sold Out
             </span>
           </div>
         )}
@@ -97,6 +100,12 @@ export function DishCard({ item, onSelect }: DishCardProps) {
           <p className="mt-2 text-sm text-[#475569] line-clamp-2 leading-relaxed">
             {item.description}
           </p>
+
+          {isLowStock && (
+            <p className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-[#B45309] bg-[#FFFBEB] border border-[#FDE68A] px-2.5 py-0.5 rounded-md tabular-nums">
+              Only {item.stockQuantity} left
+            </p>
+          )}
         </div>
 
         <div className="pt-3 border-t border-[#EAE5DC] flex items-center justify-between gap-3">
@@ -104,7 +113,7 @@ export function DishCard({ item, onSelect }: DishCardProps) {
             {formatCurrency(item.priceCents)}
           </span>
 
-          {!item.isAvailable ? (
+          {isSoldOut ? (
             <span className="text-xs font-semibold text-[#64748B] px-3 py-1.5 rounded-full bg-[#F5F2EB]">
               Sold Out
             </span>
@@ -127,9 +136,10 @@ export function DishCard({ item, onSelect }: DishCardProps) {
               </span>
               <button
                 type="button"
+                disabled={qty >= maxOrderable}
                 onClick={() => updateQuantity(item.id, qty + 1)}
                 aria-label={`Increase quantity of ${item.name}`}
-                className="w-8 h-8 rounded-full flex items-center justify-center bg-white text-[#0F172A] hover:bg-[#FAF8F5] shadow-sm transition-colors"
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-white text-[#0F172A] hover:bg-[#FAF8F5] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>

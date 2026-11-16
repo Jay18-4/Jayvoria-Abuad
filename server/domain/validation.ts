@@ -62,9 +62,9 @@ export const menuItemSchema = z.object({
   description: safeString(10, 500, 'Description'),
   priceCents: z.coerce
     .number()
-    .int('Price must be a whole number of cents.')
-    .min(50, 'Price must be at least $0.50.')
-    .max(500000, 'Price cannot exceed $5,000.00.'),
+    .int('Price must be a whole number of kobo.')
+    .min(50, 'Price must be at least ₦0.50.')
+    .max(500000000, 'Price cannot exceed ₦5,000,000.00.'),
   imageUrl: z
     .string({ error: 'Image URL is required.' })
     .trim()
@@ -81,6 +81,13 @@ export const menuItemSchema = z.object({
     .default([]),
   prepTimeMins: z.coerce.number().int().min(1).max(180).optional().default(15),
   isAvailable: z.boolean().optional().default(true),
+  stockQuantity: z.coerce
+    .number()
+    .int('Stock quantity must be a whole number.')
+    .min(0, 'Stock quantity cannot be negative.')
+    .max(9999, 'Stock quantity cannot exceed 9,999.')
+    .optional()
+    .default(25),
   isFeatured: z.boolean().optional().default(false),
 });
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Minus, Plus, Trash2, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { formatCurrency } from '../services/api';
+import { formatCurrency, FREE_DELIVERY_THRESHOLD_KOBO } from '../services/api';
 
 export function CartDrawer() {
   const {
@@ -20,7 +20,9 @@ export function CartDrawer() {
 
   const estimatedTax = Math.round(subtotalCents * 0.08);
   const estimatedTotal = subtotalCents + estimatedTax;
-  const hasUnavailable = items.some((i) => !i.menuItem.isAvailable);
+  const hasUnavailable = items.some(
+    (i) => !i.menuItem.isAvailable || i.menuItem.stockQuantity <= 0 || i.quantity > i.menuItem.stockQuantity
+  );
 
   const handleCheckout = () => {
     setDrawerOpen(false);
@@ -107,11 +109,19 @@ export function CartDrawer() {
                     {formatCurrency(menuItem.priceCents)} each
                   </p>
 
-                  {!menuItem.isAvailable && (
+                  {(!menuItem.isAvailable || menuItem.stockQuantity <= 0) ? (
                     <p className="mt-1 text-xs font-semibold text-[#DC2626]">
-                      Unavailable — please remove before checkout
+                      Sold out — please remove before checkout
                     </p>
-                  )}
+                  ) : quantity > menuItem.stockQuantity ? (
+                    <p className="mt-1 text-xs font-semibold text-[#DC2626]">
+                      Only {menuItem.stockQuantity} left in stock — please reduce quantity
+                    </p>
+                  ) : menuItem.stockQuantity <= 5 ? (
+                    <p className="mt-1 text-xs font-semibold text-[#B45309] tabular-nums">
+                      Only {menuItem.stockQuantity} left
+                    </p>
+                  ) : null}
 
                   <div className="mt-3 flex items-center justify-between">
                     <div className="inline-flex items-center gap-1 p-1 rounded-full bg-[#F5F2EB]">
@@ -128,9 +138,10 @@ export function CartDrawer() {
                       </span>
                       <button
                         type="button"
+                        disabled={quantity >= Math.min(50, menuItem.stockQuantity)}
                         onClick={() => updateQuantity(menuItem.id, quantity + 1)}
                         aria-label={`Increase ${menuItem.name} quantity`}
-                        className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-[#0F172A]"
+                        className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -164,7 +175,7 @@ export function CartDrawer() {
                 <span className="tabular-nums">{formatCurrency(estimatedTotal)}</span>
               </div>
               <p className="text-[11px] text-[#64748B]">
-                Final delivery fee and totals are verified on the server at checkout. Complimentary delivery on orders over $85.00.
+                Final delivery fee and totals are verified on the server at checkout. Complimentary delivery on orders over {formatCurrency(FREE_DELIVERY_THRESHOLD_KOBO)}.
               </p>
             </div>
 

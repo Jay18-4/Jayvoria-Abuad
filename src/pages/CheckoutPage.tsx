@@ -11,7 +11,12 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
-import { apiRequest, formatCurrency } from '../services/api';
+import {
+  apiRequest,
+  DELIVERY_FEE_KOBO,
+  formatCurrency,
+  FREE_DELIVERY_THRESHOLD_KOBO,
+} from '../services/api';
 import { paymentService, type PaystackOrderDraft } from '../services/paymentService';
 import { PaystackButton } from '../components/PaystackButton';
 import type {
@@ -40,7 +45,7 @@ export function CheckoutPage() {
     provider: 'PAYSTACK',
     paystackConfigured: false,
     publicKey: null,
-    currency: 'USD',
+    currency: 'NGN',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +106,9 @@ export function CheckoutPage() {
   }, [searchParams, user, clearCart, navigate, showToast, setSearchParams]);
 
   const deliveryFeeCents =
-    fulfillmentType === 'DELIVERY' && subtotalCents > 0 && subtotalCents < 8500 ? 550 : 0;
+    fulfillmentType === 'DELIVERY' && subtotalCents > 0 && subtotalCents < FREE_DELIVERY_THRESHOLD_KOBO
+      ? DELIVERY_FEE_KOBO
+      : 0;
   const taxCents = Math.round(subtotalCents * 0.08);
   const totalCents = subtotalCents + deliveryFeeCents + taxCents;
 
@@ -325,7 +332,8 @@ export function CheckoutPage() {
                   <span>Courier Delivery</span>
                 </div>
                 <p className="text-xs text-[#64748B] mt-1">
-                  $5.50 flat fee (Free over $85)
+                  {formatCurrency(DELIVERY_FEE_KOBO)} flat fee (Free over{' '}
+                  {formatCurrency(FREE_DELIVERY_THRESHOLD_KOBO)})
                 </p>
               </button>
 

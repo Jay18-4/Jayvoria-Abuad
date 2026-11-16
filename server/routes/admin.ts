@@ -51,7 +51,7 @@ export function createAdminRouter(db: AppDatabase) {
       .prepare(
         `SELECT
           COUNT(*) as total_items,
-          COALESCE(SUM(CASE WHEN is_available = 1 THEN 1 ELSE 0 END), 0) as available_items
+          COALESCE(SUM(CASE WHEN is_available = 1 AND stock_quantity > 0 THEN 1 ELSE 0 END), 0) as available_items
          FROM menu_items WHERE is_deleted = 0`
       )
       .get() as { total_items: number; available_items: number };
@@ -157,12 +157,47 @@ export function createAdminRouter(db: AppDatabase) {
       paymentStatus = 'REFUNDED';
     }
 
-    db.prepare(`UPDATE orders SET status = ?, payment_status = ?, updated_at = ? WHERE id = ?`).run(
-      nextStatus,
-      paymentStatus,
-      now,
-      id
-    );
+    try {
+      db.exec('BEGIN IMMEDIATE');
+
+      db.prepare(`UPDATE orders SET status = ?, payment_status = ?, updated_at = ? WHERE id = ?`).run(
+        nextStatus,
+        paymentStatus,
+        now,
+        id
+      );
+
+      if (nextStatus === 'Cancelled') {
+        const itemsToRestore = db
+          .prepare('SELECT menu_item_id, quantity FROM order_items WHERE order_id = ?')
+          .all(id) as Array<{ menu_item_id: number; quantity: number }>;
+
+        const restoreStock = db.prepare(
+          `UPDATE menu_items
+           SET stock_quantity = stock_quantity + ?,
+               is_available = CASE
+                 WHEN is_deleted = 0 AND (stock_quantity + ?) > 0 THEN 1
+                 ELSE is_available
+               END,
+               updated_at = ?
+           WHERE id = ?`
+        );
+
+        for (const item of itemsToRestore) {
+          restoreStock.run(item.quantity, item.quantity, now, item.menu_item_id);
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      try {
+        db.exec('ROLLBACK');
+      } catch {
+        // Ignore rollback error
+      }
+      console.error('Failed to update order status:', err);
+      return res.status(500).json({ error: 'Unable to update order status.' });
+    }
 
     const updated = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
     return res.json({ order: formatOrderWithItems(db, updated) });
@@ -184,13 +219,14 @@ export function createAdminRouter(db: AppDatabase) {
       return res.status(400).json({ error: 'Selected category does not exist.' });
     }
 
+    const effectiveAvailable = d.stockQuantity === 0 ? false : d.isAvailable;
     const now = new Date().toISOString();
     const resInsert = db
       .prepare(
         `INSERT INTO menu_items (
           category_id, name, description, price_cents, image_url, dietary_tags,
-          prep_time_mins, is_available, is_featured, is_deleted, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+          prep_time_mins, is_available, stock_quantity, is_featured, is_deleted, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
       )
       .run(
         d.categoryId,
@@ -200,7 +236,8 @@ export function createAdminRouter(db: AppDatabase) {
         d.imageUrl,
         JSON.stringify(d.dietaryTags),
         d.prepTimeMins,
-        d.isAvailable ? 1 : 0,
+        effectiveAvailable ? 1 : 0,
+        d.stockQuantity,
         d.isFeatured ? 1 : 0,
         now,
         now
@@ -225,7 +262,8 @@ export function createAdminRouter(db: AppDatabase) {
         imageUrl: itemRow.image_url,
         dietaryTags: JSON.parse(itemRow.dietary_tags || '[]'),
         prepTimeMins: itemRow.prep_time_mins,
-        isAvailable: itemRow.is_available === 1,
+        isAvailable: itemRow.is_available === 1 && (itemRow.stock_quantity ?? 0) > 0,
+        stockQuantity: itemRow.stock_quantity ?? 0,
         isFeatured: itemRow.is_featured === 1,
         createdAt: itemRow.created_at,
         updatedAt: itemRow.updated_at,
@@ -246,7 +284,7 @@ export function createAdminRouter(db: AppDatabase) {
       return res.status(404).json({ error: 'Menu item not found.' });
     }
 
-    // Allow quick availability toggle or full update
+    // Allow quick stock adjustment, availability toggle, or full update
     const merged = {
       categoryId: req.body.categoryId ?? existing.category_id,
       name: req.body.name ?? existing.name,
@@ -260,6 +298,7 @@ export function createAdminRouter(db: AppDatabase) {
         typeof req.body.isAvailable === 'boolean'
           ? req.body.isAvailable
           : existing.is_available === 1,
+      stockQuantity: req.body.stockQuantity ?? existing.stock_quantity ?? 0,
       isFeatured:
         typeof req.body.isFeatured === 'boolean'
           ? req.body.isFeatured
@@ -279,12 +318,29 @@ export function createAdminRouter(db: AppDatabase) {
       return res.status(400).json({ error: 'Selected category does not exist.' });
     }
 
+    if (
+      d.stockQuantity === 0 &&
+      req.body.isAvailable === true &&
+      req.body.stockQuantity === undefined
+    ) {
+      return res.status(400).json({
+        error: 'Cannot mark dish available while stock quantity is 0. Increase stock first.',
+      });
+    }
+
+    let effectiveAvailable = d.isAvailable;
+    if (d.stockQuantity === 0) {
+      effectiveAvailable = false;
+    } else if ((existing.stock_quantity ?? 0) === 0 && d.stockQuantity > 0 && req.body.isAvailable === undefined) {
+      effectiveAvailable = true;
+    }
+
     const now = new Date().toISOString();
     db.prepare(
       `UPDATE menu_items SET
         category_id = ?, name = ?, description = ?, price_cents = ?,
         image_url = ?, dietary_tags = ?, prep_time_mins = ?,
-        is_available = ?, is_featured = ?, updated_at = ?
+        is_available = ?, stock_quantity = ?, is_featured = ?, updated_at = ?
        WHERE id = ?`
     ).run(
       d.categoryId,
@@ -294,7 +350,8 @@ export function createAdminRouter(db: AppDatabase) {
       d.imageUrl,
       JSON.stringify(d.dietaryTags),
       d.prepTimeMins,
-      d.isAvailable ? 1 : 0,
+      effectiveAvailable ? 1 : 0,
+      d.stockQuantity,
       d.isFeatured ? 1 : 0,
       now,
       id
@@ -319,7 +376,8 @@ export function createAdminRouter(db: AppDatabase) {
         imageUrl: itemRow.image_url,
         dietaryTags: JSON.parse(itemRow.dietary_tags || '[]'),
         prepTimeMins: itemRow.prep_time_mins,
-        isAvailable: itemRow.is_available === 1,
+        isAvailable: itemRow.is_available === 1 && (itemRow.stock_quantity ?? 0) > 0,
+        stockQuantity: itemRow.stock_quantity ?? 0,
         isFeatured: itemRow.is_featured === 1,
         createdAt: itemRow.created_at,
         updatedAt: itemRow.updated_at,

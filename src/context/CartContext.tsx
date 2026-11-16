@@ -46,35 +46,67 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = useCallback(
     (menuItem: MenuItem, quantity = 1) => {
-      if (!menuItem.isAvailable) {
-        showToast(`"${menuItem.name}" is currently unavailable.`, 'error');
+      if (!menuItem.isAvailable || menuItem.stockQuantity <= 0) {
+        showToast(`"${menuItem.name}" is currently sold out.`, 'error');
         return;
       }
+      const maxAllowed = Math.min(50, menuItem.stockQuantity);
+      let limitHit = false;
+      let addedSuccessfully = false;
+
       setItems((prev) => {
         const existing = prev.find((c) => c.menuItem.id === menuItem.id);
         if (existing) {
-          const nextQty = Math.min(50, existing.quantity + quantity);
+          if (existing.quantity >= maxAllowed) {
+            limitHit = true;
+            return prev;
+          }
+          const nextQty = Math.min(maxAllowed, existing.quantity + quantity);
+          addedSuccessfully = true;
           return prev.map((c) =>
             c.menuItem.id === menuItem.id ? { menuItem, quantity: nextQty } : c
           );
         }
-        return [...prev, { menuItem, quantity: Math.min(50, Math.max(1, quantity)) }];
+        addedSuccessfully = true;
+        return [...prev, { menuItem, quantity: Math.min(maxAllowed, Math.max(1, quantity)) }];
       });
-      showToast(`Added ${menuItem.name} to your bag.`, 'success');
+
+      if (limitHit) {
+        showToast(
+          `Only ${menuItem.stockQuantity} portion${menuItem.stockQuantity === 1 ? '' : 's'} of "${menuItem.name}" available.`,
+          'info'
+        );
+      } else if (addedSuccessfully) {
+        showToast(`Added ${menuItem.name} to your bag.`, 'success');
+      }
     },
     [showToast]
   );
 
-  const updateQuantity = useCallback((menuItemId: number, quantity: number) => {
-    if (quantity <= 0) {
-      setItems((prev) => prev.filter((c) => c.menuItem.id !== menuItemId));
-      return;
-    }
-    const clamped = Math.min(50, quantity);
-    setItems((prev) =>
-      prev.map((c) => (c.menuItem.id === menuItemId ? { ...c, quantity: clamped } : c))
-    );
-  }, []);
+  const updateQuantity = useCallback(
+    (menuItemId: number, quantity: number) => {
+      if (quantity <= 0) {
+        setItems((prev) => prev.filter((c) => c.menuItem.id !== menuItemId));
+        return;
+      }
+      let cappedMessage: string | null = null;
+      setItems((prev) =>
+        prev.map((c) => {
+          if (c.menuItem.id !== menuItemId) return c;
+          const stockLimit = c.menuItem.stockQuantity > 0 ? c.menuItem.stockQuantity : 50;
+          const maxAllowed = Math.min(50, stockLimit);
+          if (quantity > maxAllowed) {
+            cappedMessage = `Only ${maxAllowed} portion${maxAllowed === 1 ? '' : 's'} of "${c.menuItem.name}" left in stock.`;
+          }
+          return { ...c, quantity: Math.min(maxAllowed, quantity) };
+        })
+      );
+      if (cappedMessage) {
+        showToast(cappedMessage, 'info');
+      }
+    },
+    [showToast]
+  );
 
   const removeItem = useCallback(
     (menuItemId: number) => {
@@ -99,7 +131,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       prev
         .map((c) => {
           const updated = byId.get(c.menuItem.id);
-          return updated ? { ...c, menuItem: updated } : null;
+          if (!updated) return null;
+          const clampedQty =
+            updated.stockQuantity > 0 ? Math.min(c.quantity, updated.stockQuantity) : c.quantity;
+          return { ...c, menuItem: updated, quantity: clampedQty };
         })
         .filter((x): x is CartItem => x !== null)
     );

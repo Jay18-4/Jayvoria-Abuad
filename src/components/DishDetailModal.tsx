@@ -15,8 +15,13 @@ export function DishDetailModal({ item, onClose }: DishDetailModalProps) {
 
   if (!item) return null;
 
+  const isSoldOut = !item.isAvailable || item.stockQuantity <= 0;
+  const isLowStock = !isSoldOut && item.stockQuantity <= 5;
+  const maxOrderable = Math.max(1, Math.min(50, item.stockQuantity));
+  const clampedQuantity = Math.min(quantity, maxOrderable);
+
   const handleAdd = () => {
-    addItem(item, quantity);
+    addItem(item, clampedQuantity);
     onClose();
   };
 
@@ -71,6 +76,12 @@ export function DishDetailModal({ item, onClose }: DishDetailModalProps) {
 
               <p className="mt-3 text-sm text-[#475569] leading-relaxed">{item.description}</p>
 
+              {isLowStock && (
+                <p className="mt-3 inline-flex items-center text-xs font-semibold text-[#B45309] bg-[#FFFBEB] border border-[#FDE68A] px-2.5 py-1 rounded-md tabular-nums">
+                  Only {item.stockQuantity} portion{item.stockQuantity === 1 ? '' : 's'} left
+                </p>
+              )}
+
               {item.dietaryTags.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {item.dietaryTags.map((tag) => (
@@ -93,25 +104,28 @@ export function DishDetailModal({ item, onClose }: DishDetailModalProps) {
                 </span>
               </div>
 
-              {item.isAvailable ? (
+              {!isSoldOut ? (
                 <div className="flex items-center gap-3">
                   <div className="inline-flex items-center gap-1 p-1 rounded-full bg-[#F5F2EB]">
                     <button
                       type="button"
-                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                      onClick={() => setQuantity((q) => Math.max(1, Math.min(q, maxOrderable) - 1))}
                       aria-label="Decrease quantity"
                       className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0F172A]"
                     >
                       <Minus className="w-4 h-4" />
                     </button>
                     <span className="min-w-[30px] text-center font-bold text-sm tabular-nums">
-                      {quantity}
+                      {clampedQuantity}
                     </span>
                     <button
                       type="button"
-                      onClick={() => setQuantity((q) => Math.min(50, q + 1))}
+                      disabled={clampedQuantity >= maxOrderable}
+                      onClick={() =>
+                        setQuantity((q) => Math.min(maxOrderable, Math.min(q, maxOrderable) + 1))
+                      }
                       aria-label="Increase quantity"
-                      className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0F172A]"
+                      className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -122,12 +136,12 @@ export function DishDetailModal({ item, onClose }: DishDetailModalProps) {
                     onClick={handleAdd}
                     className="flex-1 py-3 px-5 rounded-full bg-[#E05A36] hover:bg-[#C84624] text-white text-sm font-semibold transition-colors tabular-nums"
                   >
-                    Add to Bag · {formatCurrency(item.priceCents * quantity)}
+                    Add to Bag · {formatCurrency(item.priceCents * clampedQuantity)}
                   </button>
                 </div>
               ) : (
                 <div className="py-3 px-4 rounded-lg bg-[#F5F2EB] text-center text-sm font-semibold text-[#64748B]">
-                  This seasonal dish is currently unavailable.
+                  This dish is currently sold out.
                 </div>
               )}
             </div>

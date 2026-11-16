@@ -20,7 +20,8 @@ function formatMenuItemRow(row: any) {
     imageUrl: row.image_url,
     dietaryTags,
     prepTimeMins: row.prep_time_mins,
-    isAvailable: row.is_available === 1,
+    isAvailable: row.is_available === 1 && (row.stock_quantity ?? 0) > 0,
+    stockQuantity: row.stock_quantity ?? 0,
     isFeatured: row.is_featured === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -79,7 +80,7 @@ export function createMenuRouter(db: AppDatabase) {
     }
 
     if (availableOnly) {
-      conditions.push('m.is_available = 1');
+      conditions.push('m.is_available = 1 AND m.stock_quantity > 0');
     }
 
     const sql = `

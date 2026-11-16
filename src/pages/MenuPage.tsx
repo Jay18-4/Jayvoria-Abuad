@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, SlidersHorizontal, ArrowDown, RotateCcw } from 'lucide-react';
-import { apiRequest } from '../services/api';
+import { apiRequest, formatCurrency, FREE_DELIVERY_THRESHOLD_KOBO } from '../services/api';
 import type { Category, MenuItem } from '../types';
 import { DishCard } from '../components/DishCard';
 import { DishDetailModal } from '../components/DishDetailModal';
@@ -93,7 +93,7 @@ export function MenuPage() {
                 <ArrowDown className="w-4 h-4" />
               </button>
               <span className="text-xs font-medium text-[#64748B]">
-                Complimentary delivery over $85 · Freshly prepared to order
+                Complimentary delivery over {formatCurrency(FREE_DELIVERY_THRESHOLD_KOBO)} · Freshly prepared to order
               </span>
             </div>
           </div>

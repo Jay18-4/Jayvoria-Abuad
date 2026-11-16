@@ -6,6 +6,7 @@ import {
   UtensilsCrossed,
   Users,
   Plus,
+  Minus,
   Pencil,
   Trash2,
   Search,
@@ -74,14 +75,17 @@ export function AdminDashboardPage() {
   const [menuCatFilter, setMenuCatFilter] = useState('all');
   const [dishModalOpen, setDishModalOpen] = useState(false);
   const [editingDish, setEditingDish] = useState<MenuItem | null>(null);
+  const [stockDrafts, setStockDrafts] = useState<Record<number, string>>({});
+  const [updatingStockId, setUpdatingStockId] = useState<number | null>(null);
   const [dishForm, setDishForm] = useState({
     categoryId: 0,
     name: '',
     description: '',
-    priceDollars: '24.00',
+    priceDollars: '24000.00',
     imageUrl: CULINARY_IMAGE_PRESETS[0].url,
     dietaryTagsText: '',
     prepTimeMins: '18',
+    stockQuantity: '25',
     isAvailable: true,
     isFeatured: false,
   });
@@ -107,6 +111,9 @@ export function AdminDashboardPage() {
       setRecentOrders(statsRes.recentOrders);
       setOrders(ordersRes.orders);
       setMenuItems(menuRes.items);
+      setStockDrafts(
+        Object.fromEntries(menuRes.items.map((item) => [item.id, String(item.stockQuantity ?? 0)]))
+      );
       setCategories(catRes.categories);
       setCustomers(custRes.customers);
     } catch (err: any) {
@@ -177,10 +184,11 @@ export function AdminDashboardPage() {
       categoryId: categories[0]?.id || 1,
       name: '',
       description: '',
-      priceDollars: '28.00',
+      priceDollars: '28000.00',
       imageUrl: CULINARY_IMAGE_PRESETS[0].url,
       dietaryTagsText: "Chef's Selection",
       prepTimeMins: '18',
+      stockQuantity: '25',
       isAvailable: true,
       isFeatured: false,
     });
@@ -197,6 +205,7 @@ export function AdminDashboardPage() {
       imageUrl: item.imageUrl,
       dietaryTagsText: item.dietaryTags.join(', '),
       prepTimeMins: String(item.prepTimeMins),
+      stockQuantity: String(item.stockQuantity ?? 0),
       isAvailable: item.isAvailable,
       isFeatured: item.isFeatured,
     });
@@ -206,6 +215,11 @@ export function AdminDashboardPage() {
   const handleSaveDish = async (e: React.FormEvent) => {
     e.preventDefault();
     const priceCents = Math.round(Number(dishForm.priceDollars) * 100);
+    const parsedStock = Number(dishForm.stockQuantity);
+    if (!Number.isInteger(parsedStock) || parsedStock < 0 || parsedStock > 9999) {
+      showToast('Stock quantity must be a whole number between 0 and 9,999.', 'error');
+      return;
+    }
     const dietaryTags = dishForm.dietaryTagsText
       .split(',')
       .map((s) => s.trim())
@@ -219,7 +233,8 @@ export function AdminDashboardPage() {
       imageUrl: dishForm.imageUrl,
       dietaryTags,
       prepTimeMins: Number(dishForm.prepTimeMins) || 15,
-      isAvailable: dishForm.isAvailable,
+      stockQuantity: parsedStock,
+      isAvailable: parsedStock === 0 ? false : dishForm.isAvailable,
       isFeatured: dishForm.isFeatured,
     };
 
@@ -241,6 +256,36 @@ export function AdminDashboardPage() {
       await loadDashboardData();
     } catch (err: any) {
       showToast(err.message || 'Unable to save dish.', 'error');
+    }
+  };
+
+  const handleAdjustStock = async (item: MenuItem, rawNextQty: number) => {
+    const nextQty = Math.max(0, Math.min(9999, Math.trunc(rawNextQty)));
+    if (Number.isNaN(nextQty) || nextQty === item.stockQuantity) {
+      setStockDrafts((prev) => ({ ...prev, [item.id]: String(item.stockQuantity) }));
+      return;
+    }
+
+    setUpdatingStockId(item.id);
+    setStockDrafts((prev) => ({ ...prev, [item.id]: String(nextQty) }));
+    try {
+      const res = await apiRequest<{ item: MenuItem }>(`/api/admin/menu/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ stockQuantity: nextQty }),
+      });
+      setMenuItems((prev) => prev.map((m) => (m.id === item.id ? res.item : m)));
+      setStockDrafts((prev) => ({ ...prev, [item.id]: String(res.item.stockQuantity) }));
+      showToast(
+        res.item.stockQuantity === 0
+          ? `"${res.item.name}" is at 0 stock and marked Sold Out.`
+          : `"${res.item.name}" stock updated to ${res.item.stockQuantity}.`,
+        res.item.stockQuantity === 0 ? 'info' : 'success'
+      );
+    } catch (err: any) {
+      setStockDrafts((prev) => ({ ...prev, [item.id]: String(item.stockQuantity) }));
+      showToast(err.message || 'Failed to update stock quantity.', 'error');
+    } finally {
+      setUpdatingStockId(null);
     }
   };
 
@@ -446,14 +491,31 @@ export function AdminDashboardPage() {
 
           {activeTab === 'overview' && stats && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {/* Dedicated Wide Revenue KPI Card */}
+              <div className="bg-white border border-[#EAE5DC] rounded-xl p-5 sm:p-6 shadow-card-rest flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#64748B]">
+                    Total Revenue
+                  </p>
+                  <p className="text-xs text-[#64748B] mt-1">
+                    Cumulative gross sales excluding cancelled orders
+                  </p>
+                </div>
+                <p
+                  data-testid="admin-overview-revenue"
+                  className="text-3xl sm:text-4xl font-bold text-[#0F172A] tabular-nums tracking-tight whitespace-nowrap"
+                >
+                  {formatCurrency(stats.totalRevenueCents)}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 {[
                   { label: 'Total Orders', value: String(stats.totalOrders) },
                   { label: 'Pending', value: String(stats.pendingOrders) },
                   { label: 'Completed', value: String(stats.completedOrders) },
                   { label: 'Customers', value: String(stats.totalCustomers) },
                   { label: 'Menu Items', value: String(stats.totalMenuItems) },
-                  { label: 'Revenue', value: formatCurrency(stats.totalRevenueCents) },
                 ].map((kpi) => (
                   <div
                     key={kpi.label}
@@ -743,70 +805,142 @@ export function AdminDashboardPage() {
                         <th className="py-3 px-5">Dish</th>
                         <th className="py-3 px-4">Category</th>
                         <th className="py-3 px-4 text-right">Price</th>
+                        <th className="py-3 px-4">Stock Qty</th>
                         <th className="py-3 px-4">Availability</th>
                         <th className="py-3 px-5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#EAE5DC] text-sm">
-                      {filteredMenu.map((item) => (
-                        <tr key={item.id} className="hover:bg-[#FAF8F5]">
-                          <td className="py-3 px-5">
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={item.imageUrl}
-                                alt={item.name}
-                                className="w-11 h-11 rounded-lg object-cover bg-[#F5F2EB] shrink-0"
-                              />
-                              <div>
-                                <p className="font-semibold text-[#0F172A]">{item.name}</p>
-                                <p className="text-xs text-[#64748B] line-clamp-1 max-w-xs">
-                                  {item.description}
-                                </p>
+                      {filteredMenu.map((item) => {
+                        const draftVal = stockDrafts[item.id] ?? String(item.stockQuantity ?? 0);
+                        const isBusy = updatingStockId === item.id;
+                        const isLow = item.stockQuantity > 0 && item.stockQuantity <= 5;
+                        const isZero = item.stockQuantity <= 0;
+
+                        return (
+                          <tr key={item.id} className="hover:bg-[#FAF8F5]">
+                            <td className="py-3 px-5">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.name}
+                                  className="w-11 h-11 rounded-lg object-cover bg-[#F5F2EB] shrink-0"
+                                />
+                                <div>
+                                  <p className="font-semibold text-[#0F172A]">{item.name}</p>
+                                  <p className="text-xs text-[#64748B] line-clamp-1 max-w-xs">
+                                    {item.description}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-xs font-medium text-[#475569]">
-                            {item.categoryName}
-                          </td>
-                          <td className="py-3 px-4 text-right font-semibold tabular-nums">
-                            {formatCurrency(item.priceCents)}
-                          </td>
-                          <td className="py-3 px-4">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleAvailability(item)}
-                              aria-label={`Toggle availability for ${item.name}`}
-                              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-                                item.isAvailable
-                                  ? 'bg-[#D1FAE5] text-[#065F46]'
-                                  : 'bg-[#FEE2E2] text-[#991B1B]'
-                              }`}
-                            >
-                              {item.isAvailable ? 'Available' : 'Unavailable'}
-                            </button>
-                          </td>
-                          <td className="py-3 px-5 text-right">
-                            <div className="inline-flex items-center gap-2">
+                            </td>
+                            <td className="py-3 px-4 text-xs font-medium text-[#475569]">
+                              {item.categoryName}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap">
+                              {formatCurrency(item.priceCents)}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex flex-col gap-1">
+                                <div className="inline-flex items-center border border-[#EAE5DC] rounded-lg bg-white overflow-hidden w-fit">
+                                  <button
+                                    type="button"
+                                    disabled={isBusy || item.stockQuantity <= 0}
+                                    onClick={() => handleAdjustStock(item, item.stockQuantity - 1)}
+                                    aria-label={`Decrease stock for ${item.name}`}
+                                    className="w-7 h-7 flex items-center justify-center text-[#0F172A] hover:bg-[#F5F2EB] disabled:opacity-40"
+                                  >
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="9999"
+                                    disabled={isBusy}
+                                    aria-label={`Stock quantity for ${item.name}`}
+                                    value={draftVal}
+                                    onChange={(e) =>
+                                      setStockDrafts((prev) => ({
+                                        ...prev,
+                                        [item.id]: e.target.value,
+                                      }))
+                                    }
+                                    onBlur={() => {
+                                      const parsed = Number(draftVal);
+                                      if (Number.isInteger(parsed) && parsed >= 0) {
+                                        handleAdjustStock(item, parsed);
+                                      } else {
+                                        setStockDrafts((prev) => ({
+                                          ...prev,
+                                          [item.id]: String(item.stockQuantity),
+                                        }));
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.currentTarget.blur();
+                                      }
+                                    }}
+                                    className="w-12 text-center text-xs font-bold text-[#0F172A] tabular-nums py-1 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleAdjustStock(item, item.stockQuantity + 1)}
+                                    aria-label={`Increase stock for ${item.name}`}
+                                    className="w-7 h-7 flex items-center justify-center text-[#0F172A] hover:bg-[#F5F2EB] disabled:opacity-40"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                {isZero ? (
+                                  <span className="text-[11px] font-semibold text-[#DC2626]">
+                                    Sold out
+                                  </span>
+                                ) : isLow ? (
+                                  <span className="text-[11px] font-semibold text-[#D97706]">
+                                    Low stock
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
                               <button
                                 type="button"
-                                onClick={() => openEditDishModal(item)}
-                                aria-label={`Edit ${item.name}`}
-                                className="p-2 rounded-lg border border-[#EAE5DC] hover:bg-[#F5F2EB] text-[#0F172A]"
+                                onClick={() => handleToggleAvailability(item)}
+                                aria-label={`Toggle availability for ${item.name}`}
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${
+                                  item.isAvailable
+                                    ? 'bg-[#D1FAE5] text-[#065F46]'
+                                    : 'bg-[#FEE2E2] text-[#991B1B]'
+                                }`}
                               >
-                                <Pencil className="w-4 h-4" />
+                                {item.isAvailable ? 'Available' : 'Sold Out'}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteDish(item)}
-                                aria-label={`Delete ${item.name}`}
-                                className="p-2 rounded-lg border border-[#EAE5DC] hover:bg-[#FEF2F2] text-[#DC2626]"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="py-3 px-5 text-right">
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDishModal(item)}
+                                  aria-label={`Edit ${item.name}`}
+                                  className="p-2 rounded-lg border border-[#EAE5DC] hover:bg-[#F5F2EB] text-[#0F172A]"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDish(item)}
+                                  aria-label={`Delete ${item.name}`}
+                                  className="p-2 rounded-lg border border-[#EAE5DC] hover:bg-[#FEF2F2] text-[#DC2626]"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1085,7 +1219,7 @@ export function AdminDashboardPage() {
 
                 <div>
                   <label htmlFor="dish-price" className="block text-xs font-semibold text-[#1E293B] mb-1">
-                    Price (USD) *
+                    Price (NGN) *
                   </label>
                   <input
                     id="dish-price"
@@ -1136,23 +1270,36 @@ export function AdminDashboardPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="dish-tags" className="block text-xs font-semibold text-[#1E293B] mb-1">
-                    Dietary Tags (comma separated)
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-1">
+                  <label htmlFor="dish-stock" className="block text-xs font-semibold text-[#1E293B] mb-1">
+                    Stock Qty *
                   </label>
                   <input
-                    id="dish-tags"
-                    type="text"
-                    value={dishForm.dietaryTagsText}
-                    onChange={(e) =>
-                      setDishForm((f) => ({ ...f, dietaryTagsText: e.target.value }))
-                    }
-                    placeholder="Vegetarian, Gluten-Free"
-                    className="w-full px-3 py-2 border border-[#EAE5DC] rounded-lg text-sm input-focus-glow"
+                    id="dish-stock"
+                    type="number"
+                    min="0"
+                    max="9999"
+                    required
+                    value={dishForm.stockQuantity}
+                    onChange={(e) => {
+                      const nextVal = e.target.value;
+                      const numeric = Number(nextVal);
+                      setDishForm((f) => ({
+                        ...f,
+                        stockQuantity: nextVal,
+                        isAvailable:
+                          nextVal !== '' && Number.isFinite(numeric) && numeric === 0
+                            ? false
+                            : Number(f.stockQuantity) === 0 && numeric > 0
+                            ? true
+                            : f.isAvailable,
+                      }));
+                    }}
+                    className="w-full px-3 py-2 border border-[#EAE5DC] rounded-lg text-sm input-focus-glow tabular-nums"
                   />
                 </div>
-                <div>
+                <div className="sm:col-span-1">
                   <label htmlFor="dish-prep" className="block text-xs font-semibold text-[#1E293B] mb-1">
                     Prep Time (mins)
                   </label>
@@ -1163,20 +1310,39 @@ export function AdminDashboardPage() {
                     max="180"
                     value={dishForm.prepTimeMins}
                     onChange={(e) => setDishForm((f) => ({ ...f, prepTimeMins: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EAE5DC] rounded-lg text-sm input-focus-glow tabular-nums"
+                  />
+                </div>
+                <div className="sm:col-span-1">
+                  <label htmlFor="dish-tags" className="block text-xs font-semibold text-[#1E293B] mb-1">
+                    Dietary Tags
+                  </label>
+                  <input
+                    id="dish-tags"
+                    type="text"
+                    value={dishForm.dietaryTagsText}
+                    onChange={(e) =>
+                      setDishForm((f) => ({ ...f, dietaryTagsText: e.target.value }))
+                    }
+                    placeholder="Vegetarian, GF"
                     className="w-full px-3 py-2 border border-[#EAE5DC] rounded-lg text-sm input-focus-glow"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center gap-6 pt-1">
+              <div className="flex flex-wrap items-center gap-6 pt-1">
                 <label className="inline-flex items-center gap-2 text-sm font-medium text-[#0F172A]">
                   <input
                     type="checkbox"
-                    checked={dishForm.isAvailable}
+                    disabled={Number(dishForm.stockQuantity) === 0}
+                    checked={Number(dishForm.stockQuantity) === 0 ? false : dishForm.isAvailable}
                     onChange={(e) => setDishForm((f) => ({ ...f, isAvailable: e.target.checked }))}
                     className="accent-[#E05A36]"
                   />
-                  <span>Available for ordering</span>
+                  <span>
+                    Available for ordering
+                    {Number(dishForm.stockQuantity) === 0 ? ' (set stock > 0)' : ''}
+                  </span>
                 </label>
 
                 <label className="inline-flex items-center gap-2 text-sm font-medium text-[#0F172A]">

@@ -44,6 +44,7 @@ export function runMigrations(db: AppDatabase): void {
       dietary_tags TEXT NOT NULL DEFAULT '[]',
       prep_time_mins INTEGER NOT NULL DEFAULT 15,
       is_available INTEGER NOT NULL DEFAULT 1,
+      stock_quantity INTEGER NOT NULL DEFAULT 25 CHECK (stock_quantity >= 0),
       is_featured INTEGER NOT NULL DEFAULT 0,
       is_deleted INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -93,7 +94,7 @@ export function runMigrations(db: AppDatabase): void {
       user_id INTEGER NOT NULL,
       provider TEXT NOT NULL DEFAULT 'PAYSTACK',
       amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
-      currency TEXT NOT NULL DEFAULT 'USD',
+      currency TEXT NOT NULL DEFAULT 'NGN',
       verification_token_hash TEXT NOT NULL,
       paystack_access_code TEXT NOT NULL DEFAULT '',
       paystack_authorization_url TEXT NOT NULL DEFAULT '',
@@ -119,6 +120,11 @@ export function runMigrations(db: AppDatabase): void {
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
@@ -200,5 +206,55 @@ export function runMigrations(db: AppDatabase): void {
       COMMIT;
       PRAGMA foreign_keys = ON;
     `);
+  }
+
+  // One-time migration: scale legacy USD-denominated seed rows (< ₦1,000) to realistic NGN kobo prices
+  const pricingMigrated = db
+    .prepare("SELECT 1 FROM schema_migrations WHERE name = 'ngn_realistic_pricing_v1'")
+    .get();
+  if (!pricingMigrated) {
+    const lowPriceRow = db
+      .prepare('SELECT COUNT(*) as c FROM menu_items WHERE price_cents < 100000')
+      .get() as { c: number };
+
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      if (lowPriceRow.c > 0) {
+        db.exec(`
+          UPDATE menu_items SET price_cents = price_cents * 1000 WHERE price_cents < 100000;
+          UPDATE order_items
+          SET unit_price_cents = unit_price_cents * 1000,
+              line_total_cents = line_total_cents * 1000
+          WHERE unit_price_cents < 100000;
+          UPDATE orders
+          SET subtotal_cents = subtotal_cents * 1000,
+              delivery_fee_cents = delivery_fee_cents * 1000,
+              tax_cents = tax_cents * 1000,
+              total_cents = total_cents * 1000
+          WHERE subtotal_cents < 100000;
+        `);
+      }
+      db.prepare("INSERT INTO schema_migrations (name) VALUES ('ngn_realistic_pricing_v1')").run();
+      db.exec('COMMIT;');
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      throw err;
+    }
+  }
+
+  // Idempotent migration: add stock_quantity to menu_items and align pre-existing sold-out rows
+  const menuColumns = db.prepare('PRAGMA table_info(menu_items)').all() as Array<{ name: string }>;
+  if (!menuColumns.some((col) => col.name === 'stock_quantity')) {
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      db.exec(`
+        ALTER TABLE menu_items ADD COLUMN stock_quantity INTEGER NOT NULL DEFAULT 25;
+        UPDATE menu_items SET stock_quantity = 0 WHERE is_available = 0;
+      `);
+      db.exec('COMMIT;');
+    } catch (err) {
+      db.exec('ROLLBACK;');
+      throw err;
+    }
   }
 }

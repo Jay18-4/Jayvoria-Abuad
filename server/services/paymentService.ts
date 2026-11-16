@@ -86,6 +86,14 @@ export function hashVerificationToken(token: string): string {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
+export function normalizePaystackCurrency(raw?: string): string {
+  const cleaned = (raw ?? '').trim().toUpperCase();
+  if (!cleaned || cleaned === 'NAIRA' || cleaned === '₦') {
+    return 'NGN';
+  }
+  return cleaned;
+}
+
 export class PaymentService {
   private readonly secretKey: string;
   private readonly publicKey: string;
@@ -103,9 +111,9 @@ export class PaymentService {
       process.env.VITE_PAYSTACK_PUBLIC_KEY ??
       ''
     ).trim();
-    this.currency = (options.currency ?? process.env.PAYSTACK_CURRENCY ?? 'USD')
-      .trim()
-      .toUpperCase();
+    this.currency = normalizePaystackCurrency(
+      options.currency ?? process.env.PAYSTACK_CURRENCY ?? 'NGN'
+    );
     this.tokenSigningSecret =
       options.tokenSigningSecret ??
       process.env.PAYMENT_TOKEN_SECRET ??

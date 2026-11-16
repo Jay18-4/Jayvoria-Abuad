@@ -132,9 +132,14 @@ export async function apiRequest<T>(
   return data as T;
 }
 
+export const DELIVERY_FEE_KOBO = 550000;
+export const FREE_DELIVERY_THRESHOLD_KOBO = 8500000;
+
 export function formatCurrency(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-NG', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'NGN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(cents / 100);
 }

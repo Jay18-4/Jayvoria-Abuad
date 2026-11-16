@@ -39,7 +39,7 @@ export function createPaymentsRouter(db: AppDatabase, paymentService: PaymentSer
     }
 
     const selectItem = db.prepare(
-      'SELECT id, name, price_cents, is_available, is_deleted FROM menu_items WHERE id = ?'
+      'SELECT id, name, price_cents, is_available, stock_quantity, is_deleted FROM menu_items WHERE id = ?'
     );
 
     const pricedLines: Array<{ unitPriceCents: number; quantity: number }> = [];
@@ -50,6 +50,7 @@ export function createPaymentsRouter(db: AppDatabase, paymentService: PaymentSer
             name: string;
             price_cents: number;
             is_available: number;
+            stock_quantity: number;
             is_deleted: number;
           }
         | undefined;
@@ -59,9 +60,14 @@ export function createPaymentsRouter(db: AppDatabase, paymentService: PaymentSer
           error: `Menu item #${menuItemId} is no longer on the menu.`,
         });
       }
-      if (dbItem.is_available !== 1) {
+      if (dbItem.is_available !== 1 || (dbItem.stock_quantity ?? 0) <= 0) {
         return res.status(400).json({
-          error: `"${dbItem.name}" is currently unavailable. Please remove it from your bag before paying.`,
+          error: `"${dbItem.name}" is currently sold out. Please remove it from your bag before paying.`,
+        });
+      }
+      if (quantity > dbItem.stock_quantity) {
+        return res.status(400).json({
+          error: `Only ${dbItem.stock_quantity} portion${dbItem.stock_quantity === 1 ? '' : 's'} of "${dbItem.name}" left in stock.`,
         });
       }
       pricedLines.push({ unitPriceCents: dbItem.price_cents, quantity });

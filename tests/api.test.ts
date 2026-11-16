@@ -405,7 +405,7 @@ describe('Savoria Full-Stack Restaurant API, Security & DB Integration Tests', (
                 status: 'success',
                 reference: initializedRef,
                 amount: initializedAmount,
-                currency: 'USD',
+                currency: 'NGN',
                 channel: 'card',
                 paid_at: '2026-11-16T12:00:00.000Z',
               },
@@ -420,7 +420,7 @@ describe('Savoria Full-Stack Restaurant API, Security & DB Integration Tests', (
       const paySvc = new PaymentService({
         secretKey,
         publicKey: 'pk_test_mock_paystack_public',
-        currency: 'USD',
+        currency: 'NGN',
         tokenSigningSecret: 'test-token-signing-secret',
         fetchImpl: mockFetch,
       });
@@ -521,7 +521,7 @@ describe('Savoria Full-Stack Restaurant API, Security & DB Integration Tests', (
           id: 888123,
           reference: initRes.body.reference,
           amount: initializedAmount,
-          currency: 'USD',
+          currency: 'NGN',
           channel: 'card',
         },
       };
@@ -593,6 +593,107 @@ describe('Savoria Full-Stack Restaurant API, Security & DB Integration Tests', (
         .get('/api/admin/stats')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(afterLogoutStats.status).toBe(401);
+    });
+  });
+
+  describe('8. Inventory Stock Quantity Management, Auto Sold-Out & Cancel Restore', () => {
+    it('creates dish with stockQuantity, deducts atomically on order, auto-marks sold out at 0, blocks oversell, and restores stock on order cancellation', async () => {
+      const { agent: adminAgent, csrfToken: adminCsrf } = await loginAs(
+        app,
+        'admin@savoria.com',
+        SEED_PASSWORDS.admin
+      );
+      const { agent: custAgent, csrfToken: custCsrf } = await loginAs(
+        app,
+        'guest@savoria.com',
+        SEED_PASSWORDS.customer
+      );
+
+      // Admin creates a limited seasonal dish with stockQuantity = 3
+      const catRes = await request(app).get('/api/categories');
+      const catId = catRes.body.categories[0].id;
+      const createDish = await adminAgent
+        .post('/api/admin/menu')
+        .set('X-CSRF-Token', adminCsrf)
+        .send({
+          categoryId: catId,
+          name: 'Limited Ember Lobster',
+          description: 'Wood-roasted Atlantic lobster with herb butter.',
+          priceCents: 4500000,
+          imageUrl: '/src/assets/images/dish_branzino_crudo_1794832268780.jpg',
+          dietaryTags: ['Gluten-Free'],
+          prepTimeMins: 24,
+          stockQuantity: 3,
+          isAvailable: true,
+        });
+      expect(createDish.status).toBe(201);
+      expect(createDish.body.item.stockQuantity).toBe(3);
+      expect(createDish.body.item.isAvailable).toBe(true);
+      const dishId = createDish.body.item.id;
+
+      // Customer tries to order 4 (more than 3 in stock) -> rejected 400
+      const oversellAttempt = await custAgent
+        .post('/api/orders')
+        .set('X-CSRF-Token', custCsrf)
+        .send({
+          items: [{ menuItemId: dishId, quantity: 4 }],
+          customerName: 'Julian Vance',
+          customerEmail: 'guest@savoria.com',
+          customerPhone: '4155550148',
+          fulfillmentType: 'COLLECTION',
+          paymentMethod: 'PAY_ON_COLLECTION',
+        });
+      expect(oversellAttempt.status).toBe(400);
+      expect(oversellAttempt.body.error).toMatch(/Only 3/);
+
+      // Customer buys all 3 remaining portions -> succeeds, stock drops to 0, auto-marks unavailable
+      const orderAll = await custAgent
+        .post('/api/orders')
+        .set('X-CSRF-Token', custCsrf)
+        .send({
+          items: [{ menuItemId: dishId, quantity: 3 }],
+          customerName: 'Julian Vance',
+          customerEmail: 'guest@savoria.com',
+          customerPhone: '4155550148',
+          fulfillmentType: 'COLLECTION',
+          paymentMethod: 'PAY_ON_COLLECTION',
+        });
+      expect(orderAll.status).toBe(201);
+      const createdOrderId = orderAll.body.order.id;
+
+      const afterBuy = await request(app).get(`/api/menu/${dishId}`);
+      expect(afterBuy.status).toBe(200);
+      expect(afterBuy.body.item.stockQuantity).toBe(0);
+      expect(afterBuy.body.item.isAvailable).toBe(false);
+
+      // Admin cannot toggle availability on while stock is 0
+      const badToggle = await adminAgent
+        .patch(`/api/admin/menu/${dishId}`)
+        .set('X-CSRF-Token', adminCsrf)
+        .send({ isAvailable: true });
+      expect(badToggle.status).toBe(400);
+
+      // Admin cancels the order -> stock is restored back to 3 & dish automatically becomes available again
+      const cancelRes = await adminAgent
+        .patch(`/api/admin/orders/${createdOrderId}/status`)
+        .set('X-CSRF-Token', adminCsrf)
+        .send({ status: 'Cancelled' });
+      expect(cancelRes.status).toBe(200);
+      expect(cancelRes.body.order.status).toBe('Cancelled');
+
+      const afterCancel = await request(app).get(`/api/menu/${dishId}`);
+      expect(afterCancel.status).toBe(200);
+      expect(afterCancel.body.item.stockQuantity).toBe(3);
+      expect(afterCancel.body.item.isAvailable).toBe(true);
+
+      // Admin adjusts stock manually to 12 via inline PATCH
+      const restockRes = await adminAgent
+        .patch(`/api/admin/menu/${dishId}`)
+        .set('X-CSRF-Token', adminCsrf)
+        .send({ stockQuantity: 12 });
+      expect(restockRes.status).toBe(200);
+      expect(restockRes.body.item.stockQuantity).toBe(12);
+      expect(restockRes.body.item.isAvailable).toBe(true);
     });
   });
 });
