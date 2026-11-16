@@ -1,0 +1,8 @@
+{
+  "name": "Jayvoria — Abuad Hospitality Ordering",
+  "description": "Full-stack restaurant ordering experience and culinary operations dashboard for Jayvoria Abuad Hospitality.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

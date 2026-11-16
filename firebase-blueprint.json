@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered customer or administrator account metadata",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "role": { "type": "string", "enum": ["CUSTOMER", "ADMIN"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Culinary menu category",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z0-9-]+$" },
+        "sortOrder": { "type": "number" }
+      },
+      "required": ["name", "slug", "sortOrder"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Restaurant menu dish or beverage",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "priceCents": { "type": "number" },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "imageUrl": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "isAvailable": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "description", "priceCents", "categoryId", "imageUrl", "isAvailable", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer restaurant order",
+      "type": "object",
+      "properties": {
+        "orderReference": { "type": "string", "minLength": 4, "maxLength": 32 },
+        "customerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "Confirmed", "Preparing", "Ready", "Completed", "Cancelled"]
+        },
+        "totalCents": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderReference", "customerUid", "status", "totalCents", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile records keyed by Firebase Auth UID"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Publicly readable restaurant menu categories"
+    },
+    "/menuItems/{itemId}": {
+      "schema": { "$ref": "#/entities/MenuItem" },
+      "description": "Publicly readable restaurant menu items"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders isolated per customer or administrator"
+    }
+  }
+}
